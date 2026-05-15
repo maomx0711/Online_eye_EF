@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh">
 <head>
     <meta charset="UTF-8">
     <title>Center Flanker (jsPsych + WebGazer)</title>
@@ -95,7 +95,11 @@
             ARROW_GAP: 10,
             FIXATION_SIZE: 8,
             FIXATION_THICKNESS: 2,
-            FULLSCREEN_DELAY: 100
+            FULLSCREEN_DELAY: 100,
+            RESPONSE_LEFT_KEY: 'n',
+            RESPONSE_RIGHT_KEY: 'm',
+            RESPONSE_LEFT_CODE: 2,
+            RESPONSE_RIGHT_CODE: 1
         };
 
         let experimentResults = {
@@ -125,7 +129,7 @@
             webgazerReady = true;
         }
 
-        function handleGazeSample(data, timestamp) {
+        function handleGazeSample(data, webgazerTimestamp) {
             if (!gazeRecording || !data) {
                 return;
             }
@@ -135,7 +139,7 @@
                 trial: currentTrialIndex,
                 t: now,
                 timeFromStimulus: gazeTrialStart ? now - gazeTrialStart : null,
-                webgazerTimestamp: typeof timestamp === 'number' ? timestamp : null,
+                webgazerTimestamp: typeof webgazerTimestamp === 'number' ? webgazerTimestamp : null,
                 x: data.x ?? null,
                 y: data.y ?? null,
                 confidence: data.confidence ?? null,
@@ -335,7 +339,11 @@
 
         function buildTrialResult(trial, gazeData) {
             const responseKey = trialState.response;
-            const responseCode = responseKey === 'm' ? 1 : responseKey === 'n' ? 2 : 0;
+            const responseCode = responseKey === PARAMS.RESPONSE_RIGHT_KEY
+                ? PARAMS.RESPONSE_RIGHT_CODE
+                : responseKey === PARAMS.RESPONSE_LEFT_KEY
+                    ? PARAMS.RESPONSE_LEFT_CODE
+                    : 0;
             const correct = responseCode === trial.targetCode ? 1 : 0;
 
             return {
@@ -356,13 +364,20 @@
             };
         }
 
+        function sanitizeFilename(value) {
+            const sanitized = String(value || '').replace(/[\\/:*?"<>|]+/g, '_').trim();
+            return sanitized.length > 0 ? sanitized : 'subject';
+        }
+
         function saveData() {
+            const safeSubject = sanitizeFilename(experimentResults.subjectID);
+            const safeRun = Number.isFinite(experimentResults.runNum) ? experimentResults.runNum : 1;
             const json = JSON.stringify(experimentResults, null, 2);
             const blob = new Blob([json], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `${experimentResults.subjectID}_run${experimentResults.runNum}_centerflanker.json`;
+            link.download = `${safeSubject}_run${safeRun}_centerflanker.json`;
             link.click();
         }
 
@@ -388,6 +403,9 @@
             on_finish: function(data) {
                 subjectID = data.response.subjectID;
                 const parsedRun = parseInt(data.response.runNum, 10);
+                if (!Number.isFinite(parsedRun) || parsedRun <= 0) {
+                    alert('Run编号无效，已自动设为1');
+                }
                 runNum = Number.isFinite(parsedRun) && parsedRun > 0 ? parsedRun : 1;
                 experimentResults.subjectID = subjectID;
                 experimentResults.runNum = runNum;
@@ -461,11 +479,18 @@
                     drawTrialStimulus(c.getContext('2d'), trial);
                 },
                 canvas_size: [SCREEN_WIDTH, SCREEN_HEIGHT],
-                choices: ['n', 'm'],
+                choices: [PARAMS.RESPONSE_LEFT_KEY, PARAMS.RESPONSE_RIGHT_KEY],
                 response_ends_trial: false,
                 trial_duration: PARAMS.TIME_TARGET,
                 on_start: function() {
-                    trialState = { responded: false, response: null, rt: null, responseSource: null, stimulusOnset: null };
+                    trialState = {
+                        responded: false,
+                        response: null,
+                        rt: null,
+                        responseSource: null,
+                        stimulusOnset: null,
+                        responseWindowStart: null
+                    };
                     startGazeRecording(trialIndex);
                 },
                 on_finish: function(data) {
@@ -483,14 +508,20 @@
                 },
                 canvas_size: [SCREEN_WIDTH, SCREEN_HEIGHT],
                 choices: function() {
-                    return trialState.responded ? "NO_KEYS" : ['n', 'm'];
+                    return trialState.responded ? "NO_KEYS" : [PARAMS.RESPONSE_LEFT_KEY, PARAMS.RESPONSE_RIGHT_KEY];
                 },
                 trial_duration: function() {
                     return trialState.responded ? PARAMS.MIN_TRIAL_DURATION : PARAMS.TIME_RESPONSE;
                 },
+                on_start: function() {
+                    trialState.responseWindowStart = performance.now();
+                },
                 on_finish: function(data) {
                     if (!trialState.responded && data.response !== null) {
-                        registerResponse(data.response, data.rt + PARAMS.TIME_TARGET, 'response');
+                        const rt = trialState.responseWindowStart
+                            ? trialState.responseWindowStart - trialState.stimulusOnset + data.rt
+                            : data.rt;
+                        registerResponse(data.response, rt, 'response');
                     }
                     const gazeData = stopGazeRecording();
                     const trialResult = buildTrialResult(trial, gazeData);
