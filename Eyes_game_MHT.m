@@ -91,6 +91,7 @@ size=60;
 rest=45;
 awa=1;
 TrialNum=120;
+NO_TARGET_LOCATION=-1;
 result=zeros(8,TrialNum);
 Screen('Preference', 'SkipSyncTests', 1);
 leftKey=KbName('n');% left
@@ -329,7 +330,7 @@ end
     end
     result(2,t)=loc;
  else
-     loc=-1;
+     loc=NO_TARGET_LOCATION;
     result(2,t)=loc;
    if type==1
      Cground=C_arrow_ground{1};
@@ -429,7 +430,7 @@ for trial=1:TrialNum
     keyCode=zeros(1,256);
     keyIsDown=0;
     a=0;
-    while GetSecs-t_begin<0.4;
+    while GetSecs-t_begin<0.4
          [keyIsDown, secs, keyCode] = KbCheck;
          if  (~a)&&(keyCode(leftKey)||keyCode(rightKey)||keyCode(EscapeKey))
                     a=1;
@@ -561,17 +562,10 @@ catch
 end
 Eyelink('Shutdown');
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% PD0-PD4
+pdMap=[10 11 22 33 44 11 22 33 44];
 for trial=1:TrialNum
-    if result(2,trial)==5 || result(2,trial)==9 
-        result(6,trial)=44; %%% PD=4
-    elseif result(2,trial)==4 || result(2,trial)==8 
-        result(6,trial)=33;  %%% PD=3
-    elseif result(2,trial)==3 || result(2,trial)==7 
-        result(6,trial)=22;  %%% PD=2
-    elseif result(2,trial)==2 || result(2,trial)==6 
-        result(6,trial)=11;   %%% PD=1
-    elseif result(2,trial)==1 
-        result(6,trial)=10;  %%% PD=0;
+    if result(2,trial) ~= NO_TARGET_LOCATION
+        result(6,trial)=pdMap(result(2,trial));
     end
 end
 %%%%%%%%%%%%%%%%%%%%%%% ACC
@@ -591,7 +585,7 @@ RTnvn=0;RTinvn=0;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 for trial=1:TrialNum
     if result(7,trial)==1
-       if result(2,trial) ~=-1
+       if result(2,trial) ~= NO_TARGET_LOCATION
         if result(6,trial)==10   % PD=0
             if result(8,trial)==1
                 vn0=vn0+1;
@@ -643,7 +637,7 @@ for trial=1:TrialNum
                 RTivn4(ivn4,1)=result(5,trial);
             end
         end
-       elseif result(2,trial)==-1
+       elseif result(2,trial) == NO_TARGET_LOCATION
            if result(8,trial)==1
                 nvn=nvn+1;
                 RTnvn(nvn,1)=result(5,trial);             
@@ -698,7 +692,7 @@ inv=0;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 for trial=1:TrialNum
     %%%%%%%%%%%%%%%%%%%%%%
-   if result(2,trial)~=-1
+   if result(2,trial) ~= NO_TARGET_LOCATION
     if result(6,trial)==10
         if result(8,trial)==1
             v0=v0+result(7,trial);     
@@ -747,7 +741,7 @@ for trial=1:TrialNum
             iv4=iv4+result(7,trial);
         end
     end
-  elseif result(2,trial)==-1
+  elseif result(2,trial) == NO_TARGET_LOCATION
         if result(8,trial)==1
             nv=nv+result(7,trial);         
         
@@ -757,22 +751,24 @@ for trial=1:TrialNum
         end
   end
 end
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%ACC
-VACC_PD0=v0/(TrialNum/15)*100;
-VACC_PD1=v1/(TrialNum/15)*100;
-VACC_PD2=v2/(TrialNum/15)*100;
-VACC_PD3=v3/(TrialNum/15)*100;
-VACC_PD4=v4/(TrialNum/15)*100;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%ACC
+trialsPerPD=TrialNum/15;
+trialsNoCue=TrialNum/6;
+VACC_PD0=v0/trialsPerPD*100;
+VACC_PD1=v1/trialsPerPD*100;
+VACC_PD2=v2/trialsPerPD*100;
+VACC_PD3=v3/trialsPerPD*100;
+VACC_PD4=v4/trialsPerPD*100;
 VACCM=(VACC_PD0+VACC_PD1+VACC_PD2+VACC_PD3+VACC_PD4)/5;
-NVACC=nv/(TrialNum/6)*100;
+NVACC=nv/trialsNoCue*100;
 
-IVACC_PD0=iv0/(TrialNum/15)*100;
-IVACC_PD1=iv1/(TrialNum/15)*100;
-IVACC_PD2=iv2/(TrialNum/15)*100;
-IVACC_PD3=iv3/(TrialNum/15)*100;
-IVACC_PD4=iv4/(TrialNum/15)*100;
+IVACC_PD0=iv0/trialsPerPD*100;
+IVACC_PD1=iv1/trialsPerPD*100;
+IVACC_PD2=iv2/trialsPerPD*100;
+IVACC_PD3=iv3/trialsPerPD*100;
+IVACC_PD4=iv4/trialsPerPD*100;
 IVACCM=(IVACC_PD0+IVACC_PD1+IVACC_PD2+IVACC_PD3+IVACC_PD4)/5;
-NIVACC=inv/(TrialNum/6)*100;
+NIVACC=inv/trialsNoCue*100;
 
 ACCM=[VACC_PD0 VACC_PD1 VACC_PD2 VACC_PD3 VACC_PD4;IVACC_PD0 IVACC_PD1 IVACC_PD2 IVACC_PD3 IVACC_PD4; VACC_PD0-IVACC_PD0 VACC_PD1-IVACC_PD1 VACC_PD2-IVACC_PD2 VACC_PD3-IVACC_PD3 VACC_PD4-IVACC_PD4];
 ALL_ACC=sum(result(7,:))/TrialNum*100;
