@@ -376,7 +376,11 @@
         }
 
         function sanitizeFilename(value) {
-            const sanitized = String(value || '').replace(/[\\/:*?"<>|]+/g, '_').trim();
+            const sanitized = String(value || '')
+                .replace(/[\\/:*?"<>|]+/g, '_')
+                .replace(/\.\.+/g, '_')
+                .replace(/^\.+/, '')
+                .trim();
             return sanitized.length > 0 ? sanitized : 'subject';
         }
 
@@ -419,7 +423,7 @@
                 const parsedRun = parseInt(data.response.runNum, 10);
                 const runIsValid = Number.isFinite(parsedRun) && parsedRun > 0 && parsedRun <= PARAMS.MAX_RUN_NUM;
                 if (!runIsValid) {
-                    console.warn('Run编号无效，需为 1-999 的正整数，已自动设为 1');
+                    console.warn('Run编号无效 (invalid run number)，需为 1-999 的正整数，已自动设为 1');
                 }
                 runNum = runIsValid ? parsedRun : 1;
                 experimentResults.subjectID = subjectID;
