@@ -81,16 +81,21 @@
             TRIAL_NUM: 120,
             REST_TRIALS: 45,
             LUMINANCE: 127,
+            CUE_LOCATION_DIVISOR: 15,
+            CUED_TRIAL_RATIO: 2 / 3,
             TIME_PRE_FIXATION: 4000,
             TIME_ISI: 1000,
             TIME_TARGET: 400,
             TIME_RESPONSE: 2000,
             TIME_ITI_MIN: 1500,
             TIME_ITI_MAX: 2000,
+            TIME_DATA_SAVE: 600,
+            MIN_TRIAL_DURATION: 10,
             ARROW_SIZE: 60,
             ARROW_GAP: 10,
             FIXATION_SIZE: 8,
-            FIXATION_THICKNESS: 2
+            FIXATION_THICKNESS: 2,
+            FULLSCREEN_DELAY: 100
         };
 
         let experimentResults = {
@@ -169,7 +174,7 @@
         }
 
         function buildCueLocations() {
-            const baseCount = PARAMS.TRIAL_NUM / 15;
+            const baseCount = PARAMS.TRIAL_NUM / PARAMS.CUE_LOCATION_DIVISOR;
             const doubleCount = baseCount * 2;
             const locations = [];
             locations.push(...Array(doubleCount).fill(1));
@@ -201,7 +206,7 @@
         function generateTrials() {
             const tarType = shuffle(Array.from({ length: PARAMS.TRIAL_NUM }, (_, i) => i + 1));
             const cueLocations = buildCueLocations();
-            const cuedLimit = Math.floor((PARAMS.TRIAL_NUM * 2) / 3);
+            const cuedLimit = Math.floor(PARAMS.TRIAL_NUM * PARAMS.CUED_TRIAL_RATIO);
 
             return tarType.map((value, index) => {
                 const type = (value % 4) + 1;
@@ -382,7 +387,8 @@
             ],
             on_finish: function(data) {
                 subjectID = data.response.subjectID;
-                runNum = parseInt(data.response.runNum, 10);
+                const parsedRun = parseInt(data.response.runNum, 10);
+                runNum = Number.isFinite(parsedRun) && parsedRun > 0 ? parsedRun : 1;
                 experimentResults.subjectID = subjectID;
                 experimentResults.runNum = runNum;
                 jsPsych.data.addProperties({
@@ -417,7 +423,7 @@
                 setTimeout(() => {
                     document.body.style.overflow = 'hidden';
                     document.documentElement.style.overflow = 'hidden';
-                }, 100);
+                }, PARAMS.FULLSCREEN_DELAY);
             }
         });
 
@@ -480,7 +486,7 @@
                     return trialState.responded ? "NO_KEYS" : ['n', 'm'];
                 },
                 trial_duration: function() {
-                    return trialState.responded ? 10 : PARAMS.TIME_RESPONSE;
+                    return trialState.responded ? PARAMS.MIN_TRIAL_DURATION : PARAMS.TIME_RESPONSE;
                 },
                 on_finish: function(data) {
                     if (!trialState.responded && data.response !== null) {
@@ -529,7 +535,7 @@
             type: jsPsychHtmlKeyboardResponse,
             stimulus: '<div class="instruction-container"><h2>实验结束</h2><p>正在保存数据...</p></div>',
             choices: "NO_KEYS",
-            trial_duration: 600,
+            trial_duration: PARAMS.TIME_DATA_SAVE,
             on_finish: function() {
                 saveData();
             }
