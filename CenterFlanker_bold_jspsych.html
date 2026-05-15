@@ -99,7 +99,8 @@
             RESPONSE_LEFT_KEY: 'n',
             RESPONSE_RIGHT_KEY: 'm',
             RESPONSE_LEFT_CODE: 2,
-            RESPONSE_RIGHT_CODE: 1
+            RESPONSE_RIGHT_CODE: 1,
+            MAX_RUN_NUM: 999
         };
 
         let experimentResults = {
@@ -360,7 +361,7 @@
                 trialNumber: trial.index,
                 type: trial.type,
                 cueLocation: trial.cueLocation,
-                cueValid: trial.cueLocation === 1 ? 1 : 0,
+                cueAtCenter: trial.cueLocation === 1 ? 1 : 0,
                 targetDirection: trial.targetDir,
                 targetCode: trial.targetCode,
                 congruent: trial.congruent ? 1 : 2,
@@ -416,9 +417,9 @@
             on_finish: function(data) {
                 subjectID = data.response.subjectID;
                 const parsedRun = parseInt(data.response.runNum, 10);
-                const runIsValid = Number.isFinite(parsedRun) && parsedRun > 0;
+                const runIsValid = Number.isFinite(parsedRun) && parsedRun > 0 && parsedRun <= PARAMS.MAX_RUN_NUM;
                 if (!runIsValid) {
-                    console.warn('Run编号无效，需为正整数，已自动设为1');
+                    console.warn('Run编号无效，需为 1-999 的正整数，已自动设为 1');
                 }
                 runNum = runIsValid ? parsedRun : 1;
                 experimentResults.subjectID = subjectID;
