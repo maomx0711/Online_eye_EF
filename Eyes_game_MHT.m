@@ -278,11 +278,11 @@ target=cell(1,TrialNum);
 r=size/2;
 for t=1:TrialNum
     Cground=ground;
- type=rem(tar_type(t),4)+1;
- trialTypeOrder(t)=type;
- result(1,t)=tar_type(t);
- if tar_type(t)<=(2*TrialNum)/3
-   loc=lo(tar_type(t));
+    type=rem(tar_type(t),4)+1;
+    trialTypeOrder(t)=type;
+    result(1,t)=tar_type(t);
+    if tar_type(t)<=(2*TrialNum)/3
+        loc=lo(tar_type(t));
 
 if type==1
 Tar_picture=Cue_arrow_R;
@@ -388,7 +388,7 @@ while GetSecs<4.000+t0
 end
 
 %%%%%%%%%%%%%%%%% EyeLink recording start
-eyeTrialInfo = repmat(struct('trial',[],'trialType',[],'targetLocation',[],'targetDirection',[],...
+trialInfo = repmat(struct('trial',[],'trialType',[],'targetLocation',[],'targetDirection',[],...
     'congruency',[],'trialStart',[],'targetOnset',[],'responseKey',[],'responseTime',[],'trialEnd',[]), 1, TrialNum);
 Eyelink('Command', 'set_idle_mode');
 Eyelink('Command', 'clear_screen %d', 0);
@@ -510,16 +510,16 @@ end
     end
 
     trialEnd = GetSecs;
-    eyeTrialInfo(trial).trial = trial;
-    eyeTrialInfo(trial).trialType = trialType;
-    eyeTrialInfo(trial).targetLocation = targetLoc;
-    eyeTrialInfo(trial).targetDirection = targetDir;
-    eyeTrialInfo(trial).congruency = congruency;
-    eyeTrialInfo(trial).trialStart = trialStart;
-    eyeTrialInfo(trial).targetOnset = targetOnset;
-    eyeTrialInfo(trial).responseKey = result(4,trial);
-    eyeTrialInfo(trial).responseTime = result(5,trial);
-    eyeTrialInfo(trial).trialEnd = trialEnd;
+    trialInfo(trial).trial = trial;
+    trialInfo(trial).trialType = trialType;
+    trialInfo(trial).targetLocation = targetLoc;
+    trialInfo(trial).targetDirection = targetDir;
+    trialInfo(trial).congruency = congruency;
+    trialInfo(trial).trialStart = trialStart;
+    trialInfo(trial).targetOnset = targetOnset;
+    trialInfo(trial).responseKey = result(4,trial);
+    trialInfo(trial).responseTime = result(5,trial);
+    trialInfo(trial).trialEnd = trialEnd;
     Eyelink('Message', 'TRIAL_END %d', trial);
 end
 Eyelink('Message', 'BLOCK_END %d', runNum);
@@ -640,7 +640,7 @@ for trial=1:TrialNum
                 RTvn4(vn4,1)=result(5,trial);             
             elseif result(8,trial)==2
                 ivn4=ivn4+1;
-             RTivn4(ivn4,1)=result(5,trial);
+                RTivn4(ivn4,1)=result(5,trial);
             end
         end
        elseif result(2,trial)==-1
@@ -649,7 +649,7 @@ for trial=1:TrialNum
                 RTnvn(nvn,1)=result(5,trial);             
             elseif result(8,trial)==2
                 invn=invn+1;
-             RTinvn(invn,1)=result(5,trial);
+                RTinvn(invn,1)=result(5,trial);
             end
     end
     end
@@ -792,7 +792,7 @@ sts.result=result;
 Name=['GaAnalysis_result' '_' ID '_' Block];
 
 eyeData.edfFile = edfFile;
-eyeData.trialInfo = eyeTrialInfo;
+eyeData.trialInfo = trialInfo;
 eyeData.trialTypeOrder = trialTypeOrder;
 
 save (Name,'sts');
