@@ -338,7 +338,7 @@
             trialState.responseSource = source;
         }
 
-        function calculateResponseRt(responseWindowStart, stimulusOnset, responseRt) {
+        function adjustResponseRt(responseWindowStart, stimulusOnset, responseRt) {
             if (responseRt === null || responseRt === undefined) {
                 return null;
             }
@@ -423,7 +423,7 @@
                 const parsedRun = parseInt(data.response.runNum, 10);
                 const runIsValid = Number.isFinite(parsedRun) && parsedRun > 0 && parsedRun <= PARAMS.MAX_RUN_NUM;
                 if (!runIsValid) {
-                    console.warn('Run编号无效 (invalid run number)，需为 1-999 的正整数，已自动设为 1');
+                    console.warn('Run编号无效 (invalid run number)，须为 1-999 的正整数，已自动设为 1');
                 }
                 runNum = runIsValid ? parsedRun : 1;
                 experimentResults.subjectID = subjectID;
@@ -538,7 +538,7 @@
                 },
                 on_finish: function(data) {
                     if (!trialState.responded && data.response !== null) {
-                        const rt = calculateResponseRt(trialState.responseWindowStart, trialState.stimulusOnset, data.rt);
+                        const rt = adjustResponseRt(trialState.responseWindowStart, trialState.stimulusOnset, data.rt);
                         registerResponse(data.response, rt, 'response');
                     }
                     const gazeData = stopGazeRecording();
