@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>视觉注意实验</title>
+    <script src="https://unpkg.com/jspsych@7.3.4"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.3"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-canvas-keyboard-response@1.1.3"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-survey-text@1.1.3"></script>
+    <script src="https://unpkg.com/@jspsych-contrib/plugin-pipe@0.3.0"></script>
+    <link href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css" rel="stylesheet" type="text/css" />
+    <style>
+        /* 禁用整个页面的滚动 */
+        html, body {
+            margin: 0;
+            padding:  0;
+            width: 100%;
+            height:  100%;
+            overflow: hidden;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+        
+        body {
+            background-color: #808080;
+            cursor: none;
+        }
+        
+        .jspsych-display-element {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+        
+        canvas {
+            display: block;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        .instruction-container {
+            background-color: #808080;
+            color: #FFFF00;
+            padding: 40px;
+            font-size: 20px;
+            text-align: center;
+            max-width: 900px;
+            margin: auto;
+            overflow-y: auto;
+            max-height: 90vh;
+            line-height: 1.6;
+        }
+        
+        .instruction-container h2 {
+            color: white;
+            margin-bottom: 20px;
+        }
+        
+        .instruction-container p {
+            margin:  15px 0;
+        }
+        
+        .statistics-table {
+            color: white;
+            margin:  20px auto;
+            border-collapse: collapse;
+        }
+        
+        .statistics-table th, .statistics-table td {
+            border: 1px solid white;
+            padding: 8px 12px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <script>
+        // ========== 禁用触摸滚动和其他默认行为 ==========
+        document.addEventListener('touchmove', function(e) {
+            e.preventDefault();
+        }, { passive: false });
+        
+        document.addEventListener('wheel', function(e) {
+            e.preventDefault();
+        }, { passive: false });
+        
+        document.addEventListener('gesturestart', function(e) {
+            e.preventDefault();
+        });
+        
+        // ========== 获取屏幕尺寸 ==========
+        const SCREEN_WIDTH = window.screen.width;
+        const SCREEN_HEIGHT = window.screen.height;
+
+        // ========== 实验参数 ==========
+        const PARAMS = {
+            LUMINANCE: 127,
+            SCREEN_WIDTH: SCREEN_WIDTH,
+            SCREEN_HEIGHT:  SCREEN_HEIGHT,
+            
+            // Gabor参数
+            GABOR_SIZE: 60,
+            GABOR_CONTRAST: 0.5,
+            GABOR_SPATIAL_FREQ: 0.06,
+            GABOR_PHASE_OFFSET: 15,
+            ORIENTATION_1: -45,
+            ORIENTATION_2: 45,
+            ROT_ANGLE: 10,
+            
+            // 时间参数（毫秒）
+            TIME_PRE_FIXATION: 4000,
+            TIME_CUE: 300,
+            TIME_ISI: 300,
+            TIME_PROBE: 100,
+            TIME_RESPONSE_WINDOW: 2000,
+            TIME_ITI_MIN: 500,
+            TIME_ITI_MAX: 1000,
+            
+            // 试次参数
+            RUN_NUM: 1,
+            CUE_TYPES: [0.1, 0.28, 0.46, 0.64, 0.82, 1],
+            
+            // 刺激参数
+            CIRCLE_SIZE: 70,
+            CIRCLE_RING_WIDTH: 2,
+            RING_LUM: 152,
+            ECCENTRICITY: 100,
+            
+            // Fixation
+            FIXATION_SIZE: 16,
+            FIXATION_THICKNESS: 1,
+            
+            // 箭头参数
+            ARROW_LENGTH: 20,
+            ARROW_WIDTH: 4,
+            ARROW_HEAD_SIZE: 12,
+            ARROW_OFFSET: 20,
+            
+            GROUND_SIZE: 660
+        };
+
+        // ========== 全局结果数组 ==========
+        let experimentResults = {
+            subjectID: '',
+            runNum: 0,
+            trials: [],
+            statistics: {}
+        };
+       
+        // ========== DataPipe 在线上传配置 ==========
+        const DATAPIPE_EXPERIMENT_ID = 'v9bNe3bsY6Go';
+        const datapipe_random_id = Math.random().toString(36).substring(2, 12);
+
+        // ========== 用全局对象保存试次序列 ==========
+        const EXP_ORDER = {
+            orderTypeNum: [],
+            orderTrialNum: [],
+            arrowDirections: [],
+            gaborPositions: [],
+            gaborStimuli: [],
+            randCom: []
+        };
+
+        // 缓存上传CSV（避免 data_string 中读不到 jsPsych.data）
+        let csv_for_upload = "";
+
+        // ========== 工具函数 ==========
+        function formatPercentage(value) {
+            return Math.round(value * 100);
+        }
+        
+        function randperm(n) {
+            const arr = Array.from({length: n}, (_, i) => i);
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        }
+        
+        function generateGabor(size, orientation, phaseOffset, randomPhase, contrast, spatialFreq) {
+            const gabor = [];
+            const oriRad = orientation * Math.PI / 180;
+            const sigma = size / 6;
+            const phase = 2 * Math.PI * randomPhase + phaseOffset * Math.PI / 180;
+            
+            for (let y = 0; y < size; y++) {
+                gabor[y] = [];
+                for (let x = 0; x < size; x++) {
+                    const xc = x - size/2;
+                    const yc = y - size/2;
+                    
+                    const xRot = xc * Math.cos(oriRad) + yc * Math.sin(oriRad);
+                    const gaussian = Math.exp(-(xc*xc + yc*yc) / (2 * sigma * sigma));
+                    const sinusoid = Math.sin(2 * Math.PI * spatialFreq * xRot + phase);
+                    
+                    const value = 0.5 + contrast * gaussian * sinusoid / 2;
+                    gabor[y][x] = Math.max(0, Math.min(1, value));
+                }
+            }
+            return gabor;
+        }
+        
+        function drawCircleRing(ctx, centerX, centerY, size, ringWidth, color) {
+            const radius = size / 2;
+            ctx.strokeStyle = `rgb(${color}, ${color}, ${color})`;
+            ctx.lineWidth = ringWidth;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius - ringWidth/2, 0, 2 * Math.PI);
+            ctx.stroke();
+        }
+        
+        function drawFixation(ctx, centerX, centerY) {
+            ctx.fillStyle = 'white';
+            const halfSize = PARAMS.FIXATION_SIZE / 2;
+            const halfThick = PARAMS.FIXATION_THICKNESS / 2;
+            
+            ctx.fillRect(centerX - halfSize, centerY - halfThick, PARAMS.FIXATION_SIZE, PARAMS.FIXATION_THICKNESS);
+            ctx.fillRect(centerX - halfThick, centerY - halfSize, PARAMS.FIXATION_THICKNESS, PARAMS.FIXATION_SIZE);
+        }
+        
+        function drawArrow(ctx, centerX, centerY, direction, color) {
+            const dirRad = direction * Math.PI / 180;
+            const halfLength = PARAMS.ARROW_LENGTH / 2;
+            const halfWidth = PARAMS.ARROW_WIDTH / 2;
+            const headSize = PARAMS.ARROW_HEAD_SIZE;
+            
+            const points = [
+                [-halfLength, -halfWidth],
+                [halfLength, -halfWidth],
+                [halfLength, -headSize/2],
+                [halfLength + headSize, 0],
+                [halfLength, headSize/2],
+                [halfLength, halfWidth],
+                [-halfLength, halfWidth]
+            ];
+            
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            points.forEach((p, i) => {
+                const x = p[0] * Math.cos(dirRad) - p[1] * Math.sin(dirRad) + centerX;
+                const y = p[0] * Math.sin(dirRad) + p[1] * Math.cos(dirRad) + centerY;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.closePath();
+            ctx.fill();
+        }
+        
+        function drawGabor(ctx, gabor, centerX, centerY) {
+            const size = gabor.length;
+            const radius = PARAMS.GABOR_SIZE / 2;
+            const startX = centerX - size / 2;
+            const startY = centerY - size / 2;
+            
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const dx = x - size/2;
+                    const dy = y - size/2;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    
+                    if (dist <= radius) {
+                        const value = Math.floor(gabor[y][x] * 255);
+                        ctx.fillStyle = `rgb(${value}, ${value}, ${value})`;
+                        ctx.fillRect(startX + x, startY + y, 1, 1);
+                    }
+                }
+            }
+        }
+
+        function generateTrialSequence() {
+            const blocks = [];
+            const typeBlocks = [];
+            
+            for (let i = 0; i < PARAMS.CUE_TYPES.length; i++) {
+                const cueType = PARAMS.CUE_TYPES[i];
+                const numOnes = Math.round(PARAMS.RUN_NUM * cueType);
+                const block = [
+                    ... Array(numOnes).fill(1),
+                    ...Array(PARAMS.RUN_NUM - numOnes).fill(0)
+                ];
+                
+                for (let j = block.length - 1; j > 0; j--) {
+                    const k = Math.floor(Math.random() * (j + 1));
+                    [block[j], block[k]] = [block[k], block[j]];
+                }
+                
+                blocks.push(block);
+                typeBlocks.push(Array(PARAMS.RUN_NUM).fill(cueType));
+            }
+            
+            const randCom = randperm(PARAMS.CUE_TYPES.length);
+            const orderTypeNum = [];
+            const orderTrialNum = [];
+            
+            randCom.forEach(idx => {
+                orderTypeNum.push(... typeBlocks[idx]);
+                orderTrialNum.push(... blocks[idx]);
+            });
+            
+            return {orderTypeNum, orderTrialNum, randCom};
+        }
+        
+        function generateArrowAndGaborPositions(orderTrialNum) {
+            const totalTrials = orderTrialNum.length;
+            const arrowDirections = [];
+            const gaborPositions = [];
+            
+            for (let trial = 0; trial < totalTrials; trial++) {
+                if (orderTrialNum[trial] === 1) {
+                    if (trial % 2 === 0) {
+                        arrowDirections.push(1);
+                        gaborPositions.push(1);
+                    } else {
+                        arrowDirections.push(2);
+                        gaborPositions.push(2);
+                    }
+                } else {
+                    if (trial % 2 === 0) {
+                        arrowDirections.push(1);
+                        gaborPositions.push(2);
+                    } else {
+                        arrowDirections.push(2);
+                        gaborPositions.push(1);
+                    }
+                }
+            }
+            
+            return {arrowDirections, gaborPositions};
+        }
+        
+        function pregenerateStimuli(orderTrialNum, gaborPositions) {
+            const totalTrials = orderTrialNum.length;
+            const gaborStimuli = [];
+            const orientations = [];
+            const halfTrials = Math.floor(totalTrials / 2);
+
+            const firstHalf = [
+                ...Array(Math.floor(halfTrials / 2)).fill(1),
+                ...Array(Math.ceil(halfTrials / 2)).fill(2)
+            ];
+            for (let i = firstHalf.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [firstHalf[i], firstHalf[j]] = [firstHalf[j], firstHalf[i]];
+            }
+            orientations.push(...firstHalf);
+    
+            const secondHalf = [
+                 ...Array(Math.floor((totalTrials - halfTrials) / 2)).fill(1),
+                 ...Array(Math.ceil((totalTrials - halfTrials) / 2)).fill(2)
+            ];
+            for (let i = secondHalf.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [secondHalf[i], secondHalf[j]] = [secondHalf[j], secondHalf[i]];
+            }
+            orientations.push(...secondHalf);
+    
+            for (let trial = 0; trial < totalTrials; trial++) {
+                const targetOri = orientations[trial];
+                const targetLoc = gaborPositions[trial];
+
+                let gaborOri;
+                if (trial < totalTrials / 2) {
+                    gaborOri = targetOri === 1 ? PARAMS.ORIENTATION_1 - PARAMS.ROT_ANGLE : PARAMS.ORIENTATION_1 + PARAMS.ROT_ANGLE;
+                } else {
+                    gaborOri = targetOri === 1 ? PARAMS.ORIENTATION_2 - PARAMS.ROT_ANGLE : PARAMS.ORIENTATION_2 + PARAMS.ROT_ANGLE;
+                }
+
+                const gabor = generateGabor(
+                    PARAMS.GABOR_SIZE,
+                    gaborOri,
+                    PARAMS.GABOR_PHASE_OFFSET,
+                    Math.random(),
+                    PARAMS.GABOR_CONTRAST,
+                    PARAMS.GABOR_SPATIAL_FREQ
+                );
+
+                gaborStimuli.push({
+                    gabor: gabor,
+                    position: targetLoc,
+                    orientation: targetOri,
+                    gaborOrientation: gaborOri
+                });
+            }
+
+            return gaborStimuli;
+        }
+
+        function analyzeResults() {
+            const numCueTypes = PARAMS.CUE_TYPES.length;
+            const statistics = {
+                cueTypes: PARAMS.CUE_TYPES,
+                accuracyByCue: [],
+                rtByCue: [],
+                accuracyConsistent: [],
+                accuracyInconsistent: [],
+                rtConsistent: [],
+                rtInconsistent: [],
+                cueingEffectAcc: [],
+                cueingEffectRt: []
+            };
+            
+            for (let i = 0; i < numCueTypes; i++) {
+                const cueValue = PARAMS.CUE_TYPES[i];
+                const cueTrials = experimentResults.trials.filter(t => t.cueValidity === cueValue);
+                
+                const validResponses = cueTrials.filter(t => t.responseCode > 0);
+                const correctTrials = validResponses.filter(t => t.correct === 1);
+                const accuracy = validResponses.length > 0 ? (correctTrials.length / validResponses.length) * 100 : 0;
+                statistics.accuracyByCue.push(accuracy);
+                
+                const validRt = validResponses.filter(t => t.rt !== null).map(t => t.rt);
+                const meanRt = validRt.length > 0 ? validRt.reduce((a, b) => a + b, 0) / validRt.length : 0;
+                statistics.rtByCue.push(meanRt);
+                
+                const consistentTrials = cueTrials.filter(t => t.consistency === 1 && t.responseCode > 0);
+                const correctConsistent = consistentTrials.filter(t => t.correct === 1);
+                const accConsistent = consistentTrials.length > 0 ? (correctConsistent.length / consistentTrials.length) * 100 : 0;
+                statistics.accuracyConsistent.push(accConsistent);
+                
+                const rtConsistent = consistentTrials.filter(t => t.rt !== null).map(t => t.rt);
+                const meanRtConsistent = rtConsistent.length > 0 ? rtConsistent.reduce((a, b) => a + b, 0) / rtConsistent.length : 0;
+                statistics.rtConsistent.push(meanRtConsistent);
+                
+                const inconsistentTrials = cueTrials.filter(t => t.consistency === 0 && t.responseCode > 0);
+                const correctInconsistent = inconsistentTrials.filter(t => t.correct === 1);
+                const accInconsistent = inconsistentTrials.length > 0 ? (correctInconsistent.length / inconsistentTrials.length) * 100 : 0;
+                statistics.accuracyInconsistent.push(accInconsistent);
+                
+                const rtInconsistent = inconsistentTrials.filter(t => t.rt !== null).map(t => t.rt);
+                const meanRtInconsistent = rtInconsistent.length > 0 ? rtInconsistent.reduce((a, b) => a + b, 0) / rtInconsistent.length : 0;
+                statistics.rtInconsistent.push(meanRtInconsistent);
+                
+                statistics.cueingEffectAcc.push(accConsistent - accInconsistent);
+                statistics.cueingEffectRt.push(meanRtInconsistent - meanRtConsistent);
+            }
+            
+            return statistics;
+        }
+        
+        function saveDataToLocal() {
+            const resultsJSON = JSON.stringify(experimentResults, null, 2);
+            const resultsBlob = new Blob([resultsJSON], {type: 'application/json'});
+            const resultsUrl = URL.createObjectURL(resultsBlob);
+            const resultsLink = document.createElement('a');
+            resultsLink.href = resultsUrl;
+            resultsLink.download = `${experimentResults.subjectID}_run${experimentResults.runNum}_results.json`;
+            resultsLink.click();
+            
+            let csv = 'TrialNumber,CueValidity,Consistency,ArrowDirection,GaborPosition,GaborOrientation,Response,ResponseCode,RT,Correct\n';
+            experimentResults.trials.forEach(trial => {
+                csv += `${trial.trialNumber},${trial.cueValidity},${trial.consistency},${trial.arrowDirection},${trial.gaborPosition},${trial.gaborOrientation},${trial.response || ''},${trial.responseCode},${trial.rt || ''},${trial.correct}\n`;
+            });
+            
+            const csvBlob = new Blob([csv], {type: 'text/csv'});
+            const csvUrl = URL.createObjectURL(csvBlob);
+            const csvLink = document.createElement('a');
+            csvLink.href = csvUrl;
+            csvLink.download = `${experimentResults.subjectID}_run${experimentResults.runNum}_data.csv`;
+            csvLink.click();
+            
+            const statsJSON = JSON.stringify(experimentResults.statistics, null, 2);
+            const statsBlob = new Blob([statsJSON], {type: 'application/json'});
+            const statsUrl = URL.createObjectURL(statsBlob);
+            const statsLink = document.createElement('a');
+            statsLink.href = statsUrl;
+            statsLink.download = `${experimentResults.subjectID}_run${experimentResults.runNum}_statistics.json`;
+            statsLink.click();
+        }
+        
+        function generateStatisticsReport() {
+            const stats = experimentResults.statistics;
+            let html = '<div class="instruction-container">';
+            html += '<h2>实验完成！</h2>';
+            html += '<h3>统计结果</h3>';
+            html += '<table class="statistics-table">';
+            html += '<tr><th>Cue有效率(%)</th><th>总正确率(%)</th><th>总RT(ms)</th><th>一致正确率(%)</th><th>一致RT(ms)</th><th>不一致正确率(%)</th><th>不一致RT(ms)</th></tr>';
+            
+            for (let i = 0; i < stats.cueTypes.length; i++) {
+                html += '<tr>';
+                html += `<td>${formatPercentage(stats.cueTypes[i])}</td>`;
+                html += `<td>${stats.accuracyByCue[i].toFixed(2)}</td>`;
+                html += `<td>${stats.rtByCue[i].toFixed(2)}</td>`;
+                html += `<td>${stats.accuracyConsistent[i].toFixed(2)}</td>`;
+                html += `<td>${stats.rtConsistent[i].toFixed(2)}</td>`;
+                html += `<td>${stats.accuracyInconsistent[i].toFixed(2)}</td>`;
+                html += `<td>${stats.rtInconsistent[i].toFixed(2)}</td>`;
+                html += '</tr>';
+            }
+            
+            html += '</table>';
+            html += '<p style="margin-top: 20px;">数据已自动保存到本地</p>';
+            html += '</div>';
+            
+            return html;
+        }
+
+        const jsPsych = initJsPsych({
+            on_finish: function() {
+                // 结束显示由 timeline 中的结束报告负责
+            }
+        });
+
+        let subjectID = '';
+        let runNum = 1;
+        const timeline = [];
+
+        const subjectInfo = {
+            type: jsPsychSurveyText,
+            questions: [
+                {prompt: '被试姓名:', name: 'subjectID', required: true},
+                {prompt:  'Run编号:', name: 'runNum', required: true}
+            ],
+            on_finish: function(data) {
+                const responses = data.response;
+                subjectID = responses.subjectID;
+                runNum = parseInt(responses.runNum);
+                
+                experimentResults.subjectID = subjectID;
+                experimentResults.runNum = runNum;
+                
+                jsPsych.data.addProperties({
+                    subject_id: subjectID,
+                    run_number: runNum,
+                    random_id: datapipe_random_id
+                });
+            }
+        };
+        timeline.push(subjectInfo);
+
+        const requestFullscreen = {
+            type: jsPsychHtmlKeyboardResponse,
+            stimulus: '<div class="instruction-container"><h2>实验准备</h2><p>实验将以全屏模式运行</p><p>按 空格键 进入全屏并继续</p></div>',
+            choices: [' '],
+            on_finish:  function() {
+                const elem = document.documentElement;
+                if (elem.requestFullscreen) {
+                    elem.requestFullscreen();
+                } else if (elem.webkitRequestFullscreen) {
+                    elem.webkitRequestFullscreen();
+                } else if (elem.msRequestFullscreen) {
+                    elem.msRequestFullscreen();
+                }
+                
+                setTimeout(() => {
+                    document.body.style.overflow = 'hidden';
+                    document.documentElement.style.overflow = 'hidden';
+                }, 100);
+            }
+        };
+        timeline.push(requestFullscreen);
+
+        const generateExperiment = {
+            type: jsPsychHtmlKeyboardResponse,
+            stimulus: '<div class="instruction-container"><p>正在生成刺激...</p></div>',
+            choices: "NO_KEYS",
+            trial_duration: 1000,
+            on_start: function() {
+                const seq = generateTrialSequence();
+                const pos = generateArrowAndGaborPositions(seq.orderTrialNum);
+                const stims = pregenerateStimuli(seq.orderTrialNum, pos.gaborPositions);
+
+                EXP_ORDER.orderTypeNum = seq.orderTypeNum;
+                EXP_ORDER.orderTrialNum = seq.orderTrialNum;
+                EXP_ORDER.randCom = seq.randCom;
+                EXP_ORDER.arrowDirections = pos.arrowDirections;
+                EXP_ORDER.gaborPositions = pos.gaborPositions;
+                EXP_ORDER.gaborStimuli = stims;
+            }
+        };
+        timeline.push(generateExperiment);
+
+        const sampleGabors = [
+            generateGabor(PARAMS.GABOR_SIZE, PARAMS.ORIENTATION_1 - 20, PARAMS.GABOR_PHASE_OFFSET, 0.5, PARAMS.GABOR_CONTRAST, PARAMS.GABOR_SPATIAL_FREQ),
+            generateGabor(PARAMS.GABOR_SIZE, PARAMS.ORIENTATION_1 + 20, PARAMS.GABOR_PHASE_OFFSET, 0.5, PARAMS.GABOR_CONTRAST, PARAMS.GABOR_SPATIAL_FREQ),
+            generateGabor(PARAMS.GABOR_SIZE, PARAMS.ORIENTATION_2 - 20, PARAMS.GABOR_PHASE_OFFSET, 0.5, PARAMS.GABOR_CONTRAST, PARAMS.GABOR_SPATIAL_FREQ),
+            generateGabor(PARAMS.GABOR_SIZE, PARAMS.ORIENTATION_2 + 20, PARAMS.GABOR_PHASE_OFFSET, 0.5, PARAMS.GABOR_CONTRAST, PARAMS.GABOR_SPATIAL_FREQ),
+            generateGabor(PARAMS.GABOR_SIZE, PARAMS.ORIENTATION_1, PARAMS.GABOR_PHASE_OFFSET, 0.5, PARAMS.GABOR_CONTRAST, PARAMS.GABOR_SPATIAL_FREQ),
+            generateGabor(PARAMS.GABOR_SIZE, PARAMS.ORIENTATION_2, PARAMS.GABOR_PHASE_OFFSET, 0.5, PARAMS.GABOR_CONTRAST, PARAMS.GABOR_SPATIAL_FREQ)
+        ];
+        const instructionSample2 = {
+            type: jsPsychCanvasKeyboardResponse,
+            stimulus: function(c) {
+                const ctx = c.getContext('2d');
+                const centerX = c.width / 2;
+                const centerY = c.height / 2;
+                
+                ctx.fillStyle = '#808080';
+                ctx.fillRect(0, 0, c.width, c.height);
+                
+                ctx.fillStyle = 'white';
+                ctx.font = '28px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('样例 2/2: 基准朝向 45°', centerX, centerY * 0.2);
+                
+                ctx.font = '20px Arial';
+                ctx.fillStyle = '#FFFF00';
+                ctx.fillText('参考: 45°', centerX, centerY - 150);
+                drawGabor(ctx, sampleGabors[5], centerX, centerY - 100);
+                
+                ctx.fillStyle = '#64FF64';
+                ctx.fillText('CCW (逆时针)', centerX - 150, centerY + 80);
+                ctx.fillText('按 N 键', centerX - 150, centerY + 110);
+                drawGabor(ctx, sampleGabors[2], centerX - 150, centerY);
+                
+                ctx.fillStyle = '#FF6464';
+                ctx.fillText('CW (顺时针)', centerX + 150, centerY + 80);
+                ctx.fillText('按 M 键', centerX + 150, centerY + 110);
+                drawGabor(ctx, sampleGabors[3], centerX + 150, centerY);
+                
+                ctx.fillStyle = '#FFFF00';
+                ctx.font = '24px Arial';
+                ctx.fillText('按 空格键 继续实验', centerX, c.height * 0.6);
+            },
+            canvas_size: [SCREEN_WIDTH, SCREEN_HEIGHT],
+            choices: [' ']
+        };
+        timeline.push(instructionSample2);        
+        const instructionSample1 = {
+            type: jsPsychCanvasKeyboardResponse,
+            stimulus: function(c) {
+                const ctx = c.getContext('2d');
+                const centerX = c.width / 2;
+                const centerY = c.height / 2;
+                
+                ctx.fillStyle = '#808080';
+                ctx.fillRect(0, 0, c.width, c.height);
+                
+                ctx.fillStyle = 'white';
+                ctx.font = '28px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('样例 1/2:  基准朝向 -45°', centerX, centerY * 0.2);
+                
+                ctx.font = '20px Arial';
+                ctx.fillStyle = '#FFFF00';
+                ctx.fillText('参考: -45°', centerX, centerY - 150);
+                drawGabor(ctx, sampleGabors[4], centerX, centerY - 100);
+                
+                ctx.fillStyle = '#64FF64';
+                ctx.fillText('CCW (逆时针)', centerX - 150, centerY + 80);
+                ctx.fillText('按 N 键', centerX - 150, centerY + 110);
+                drawGabor(ctx, sampleGabors[0], centerX - 150, centerY);
+                
+                ctx.fillStyle = '#FF6464';
+                ctx.fillText('CW (顺时针)', centerX + 150, centerY + 80);
+                ctx.fillText('按 M 键', centerX + 150, centerY + 110);
+                drawGabor(ctx, sampleGabors[1], centerX + 150, centerY);
+                
+                ctx.fillStyle = '#FFFF00';
+                ctx.font = '24px Arial';
+                ctx.fillText('按 空格键 继续', centerX, c.height * 0.6);
+            },
+            canvas_size: [SCREEN_WIDTH, SCREEN_HEIGHT],
+            choices: [' ']
+        };
+        timeline.push(instructionSample1);
+        
+        const arrowInstruction = {
+            type: jsPsychCanvasKeyboardResponse,
+            stimulus: function(c) {
+                const ctx = c.getContext('2d');
+                const centerX = c.width / 2;
+                const centerY = c.height / 2;
+                
+                ctx.fillStyle = '#808080';
+                ctx.fillRect(0, 0, c.width, c.height);
+                
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 28px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('箭头提示说明', centerX, 80);
+                
+                const leftArrowX = centerX - 20;
+                const rightArrowX = centerX + 20;
+                const arrowY = centerY - 200;
+                
+                drawArrow(ctx, leftArrowX, arrowY, 180, '#FFFF00');
+                drawArrow(ctx, rightArrowX, arrowY, 0, '#FFFF00');
+                drawCircleRing(ctx, centerX - PARAMS.ECCENTRICITY, centerY - 200, PARAMS.CIRCLE_SIZE, PARAMS.CIRCLE_RING_WIDTH, PARAMS.RING_LUM);
+                drawCircleRing(ctx, centerX + PARAMS.ECCENTRICITY, centerY - 200, PARAMS.CIRCLE_SIZE, PARAMS.CIRCLE_RING_WIDTH, PARAMS.RING_LUM);
+                ctx.fillStyle = '#FFFF00';
+                ctx.font = '22px Arial';
+                ctx.textAlign = 'left';
+                
+                const textStartY = centerY - 100;
+                const lineHeight = 35;
+                const textX = centerX - 200;
+                ctx.fillText('• 箭头提示目标出现在哪一边的圆环中', textX, textStartY);
+                ctx.fillText('• 每轮开始前会告知箭头提示的有效性', textX, textStartY + lineHeight);
+                ctx.fillText('• 每轮箭头提示的有效性会不同', textX, textStartY + lineHeight * 2);
+                
+                ctx.fillStyle = 'white';
+                ctx.fillText('例如：', textX, textStartY + lineHeight * 3.5);
+                ctx.fillStyle = '#64FF64';
+                ctx.fillText('  如果提示有效性为 100%，箭头指向左边', textX, textStartY + lineHeight * 4.5);
+                ctx.fillText('  目标一定会出现在左边圆环中', textX, textStartY + lineHeight * 5.5);
+                
+                ctx.fillStyle = '#FF6464';
+                ctx.fillText('  如果提示有效性为 50%，箭头指向左边', textX, textStartY + lineHeight * 6.5);
+                ctx.fillText('  目标有50%可能出现在左边，50%可能在右边', textX, textStartY + lineHeight * 7.5);
+                
+                ctx.fillStyle = 'white';
+                ctx.fillText('目标出现后，请根据光栅朝向判断按 N 键还是 M 键', textX, textStartY + lineHeight * 9);
+                
+                ctx.fillStyle = '#FFFF00';
+                ctx.font = '24px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('按 空格键 开始实验', centerX, c.height * 0.65);
+            },
+            canvas_size: [SCREEN_WIDTH, SCREEN_HEIGHT],
+            choices: [' ']
+        };
+        timeline.push(arrowInstruction);
+        timeline.push(instructionSample1);
+
+        const totalTrials = PARAMS.RUN_NUM * PARAMS.CUE_TYPES.length;
+        
+        for (let trial = 0; trial < totalTrials; trial++) {
+            if (trial === 0 || trial % PARAMS.RUN_NUM === 0) {
+                const blockInstruction = {
+                    type: jsPsychHtmlKeyboardResponse,
+                    stimulus: function() {
+                        const cueValidity = formatPercentage(EXP_ORDER.orderTypeNum[trial]);
+                        return `<div class="instruction-container">
+                            <h2>新一轮开始</h2>
+                            <p style="font-size: 28px; color: white;">箭头提示有效率为 <span style="color: #FFFF00;">${cueValidity}%</span></p>
+                            <p style="margin-top: 30px;">按 空格键 继续</p>
+                        </div>`;
+                    },
+                    choices: [' ']
+                };
+                timeline.push(blockInstruction);
+                
+                const preFixation = {
+                    type: jsPsychCanvasKeyboardResponse,
+                    stimulus: function(c) {
+                        const ctx = c.getContext('2d');
+                        const centerX = c.width / 2;
+                        const centerY = c.height / 2;
+                        
+                        ctx.fillStyle = '#808080';
+                        ctx.fillRect(0, 0, c.width, c.height);
+                        
+                        drawFixation(ctx, centerX, centerY);
+                        drawCircleRing(ctx, centerX - PARAMS.ECCENTRICITY, centerY, PARAMS.CIRCLE_SIZE, PARAMS.CIRCLE_RING_WIDTH, PARAMS.RING_LUM);
+                        drawCircleRing(ctx, centerX + PARAMS.ECCENTRICITY, centerY, PARAMS.CIRCLE_SIZE, PARAMS.CIRCLE_RING_WIDTH, PARAMS.RING_LUM);
+                    },
+                    canvas_size: [SCREEN_WIDTH, SCREEN_HEIGHT],
+                    choices: "NO_KEYS",
+                    trial_duration: PARAMS.TIME_PRE_FIXATION
+                };
+                timeline.push(preFixation);
+            }
+            
+            const cue = {
+                type: jsPsychCanvasKeyboardResponse,
+                stimulus: function(c) {
+                    const ctx = c.getContext('2d');
+                    const centerX = c.width / 2;
+                    const centerY = c.height / 2;
+                    
+                    const arrowDir = EXP_ORDER.arrowDirections[trial];
+                    
+                    ctx.fillStyle = '#808080';
+                    ctx.fillRect(0, 0, c.width, c.height);
+                    
+                    drawFixation(ctx, centerX, centerY);
+                    drawCircleRing(ctx, centerX - PARAMS.ECCENTRICITY, centerY, PARAMS.CIRCLE_SIZE, PARAMS.CIRCLE_RING_WIDTH, PARAMS.RING_LUM);
+                    drawCircleRing(ctx, centerX + PARAMS.ECCENTRICITY, centerY, PARAMS.CIRCLE_SIZE, PARAMS.CIRCLE_RING_WIDTH, PARAMS.RING_LUM);
+                    
+                    const arrowX = arrowDir === 1 ? centerX - PARAMS.ARROW_OFFSET : centerX + PARAMS.ARROW_OFFSET;
+                    const arrowDirection = arrowDir === 1 ? 180 : 0;
+                    drawArrow(ctx, arrowX, centerY, arrowDirection, '#FFFF00');
+                },
+                canvas_size: [SCREEN_WIDTH, SCREEN_HEIGHT],
+                choices: "NO_KEYS",
+                trial_duration: PARAMS.TIME_CUE
+            };
+            timeline.push(cue);
+            
+            const isi = {
+                type: jsPsychCanvasKeyboardResponse,
+                stimulus: function(c) {
+                    const ctx = c.getContext('2d');
+                    const centerX = c.width / 2;
+                    const centerY = c.height / 2;
+                    
+                    ctx.fillStyle = '#808080';
+                    ctx.fillRect(0, 0, c.width, c.height);
+                    
+                    drawFixation(ctx, centerX, centerY);
+                    drawCircleRing(ctx, centerX - PARAMS.ECCENTRICITY, centerY, PARAMS.CIRCLE_SIZE, PARAMS.CIRCLE_RING_WIDTH, PARAMS.RING_LUM);
+                    drawCircleRing(ctx, centerX + PARAMS.ECCENTRICITY, centerY, PARAMS.CIRCLE_SIZE, PARAMS.CIRCLE_RING_WIDTH, PARAMS.RING_LUM);
+                },
+                canvas_size: [SCREEN_WIDTH, SCREEN_HEIGHT],
+                choices: "NO_KEYS",
+                trial_duration: PARAMS.TIME_ISI
+            };
+            timeline.push(isi);
+            
+            const target = {
+                type: jsPsychCanvasKeyboardResponse,
+                stimulus: function(c) {
+                    const ctx = c.getContext('2d');
+                    const centerX = c.width / 2;
+                    const centerY = c.height / 2;
+                    
+                    const stimulus = EXP_ORDER.gaborStimuli[trial];
+                    
+                    ctx.fillStyle = '#808080';
+                    ctx.fillRect(0, 0, c.width, c.height);
+                    
+                    drawFixation(ctx, centerX, centerY);
+                    drawCircleRing(ctx, centerX - PARAMS.ECCENTRICITY, centerY, PARAMS.CIRCLE_SIZE, PARAMS.CIRCLE_RING_WIDTH, PARAMS.RING_LUM);
+                    drawCircleRing(ctx, centerX + PARAMS.ECCENTRICITY, centerY, PARAMS.CIRCLE_SIZE, PARAMS.CIRCLE_RING_WIDTH, PARAMS.RING_LUM);
+                    
+                    const gaborX = stimulus.position === 1 ? centerX - PARAMS.ECCENTRICITY : centerX + PARAMS.ECCENTRICITY;
+                    drawGabor(ctx, stimulus.gabor, gaborX, centerY);
+                },
+                canvas_size: [SCREEN_WIDTH, SCREEN_HEIGHT],
+                choices: "NO_KEYS",
+                trial_duration: PARAMS.TIME_PROBE
+            };
+            timeline.push(target);
+            
+            const response = {
+                type: jsPsychCanvasKeyboardResponse,
+                stimulus: function(c) {
+                    const ctx = c.getContext('2d');
+                    const centerX = c.width / 2;
+                    const centerY = c.height / 2;
+                    
+                    ctx.fillStyle = '#808080';
+                    ctx.fillRect(0, 0, c.width, c.height);
+                    
+                    drawFixation(ctx, centerX, centerY);
+                    drawCircleRing(ctx, centerX - PARAMS.ECCENTRICITY, centerY, PARAMS.CIRCLE_SIZE, PARAMS.CIRCLE_RING_WIDTH, PARAMS.RING_LUM);
+                    drawCircleRing(ctx, centerX + PARAMS.ECCENTRICITY, centerY, PARAMS.CIRCLE_SIZE, PARAMS.CIRCLE_RING_WIDTH, PARAMS.RING_LUM);
+                },
+                canvas_size: [SCREEN_WIDTH, SCREEN_HEIGHT],
+                choices: ['n', 'm'],
+                trial_duration: PARAMS.TIME_RESPONSE_WINDOW,
+                on_finish: function(data) {
+                    const response = data.response;
+                    let responseCode = 0;
+                    if (response === 'n') responseCode = 1;
+                    else if (response === 'm') responseCode = 2;
+                    
+                    const correct = responseCode === EXP_ORDER.gaborStimuli[trial].orientation ? 1 : 0;
+                    
+                    const trialResult = {
+                        trialNumber: trial + 1,
+                        cueValidity: EXP_ORDER.orderTypeNum[trial],
+                        consistency: EXP_ORDER.orderTrialNum[trial],
+                        arrowDirection: EXP_ORDER.arrowDirections[trial],
+                        gaborPosition: EXP_ORDER.gaborPositions[trial],
+                        gaborOrientation: EXP_ORDER.gaborStimuli[trial].orientation,
+                        gaborOrientationDegree: EXP_ORDER.gaborStimuli[trial].gaborOrientation,
+                        response: response,
+                        responseCode: responseCode,
+                        rt: data.rt,
+                        correct: correct
+                    };
+                    
+                    experimentResults.trials.push(trialResult);
+                    jsPsych.data.addDataToLastTrial(trialResult);
+                }
+            };
+            timeline.push(response);
+            
+            const iti = {
+                type: jsPsychCanvasKeyboardResponse,
+                stimulus: function(c) {
+                    const ctx = c.getContext('2d');
+                    const centerX = c.width / 2;
+                    const centerY = c.height / 2;
+                    
+                    ctx.fillStyle = '#808080';
+                    ctx.fillRect(0, 0, c.width, c.height);
+                    
+                    drawFixation(ctx, centerX, centerY);
+                    drawCircleRing(ctx, centerX - PARAMS.ECCENTRICITY, centerY, PARAMS.CIRCLE_SIZE, PARAMS.CIRCLE_RING_WIDTH, PARAMS.RING_LUM);
+                    drawCircleRing(ctx, centerX + PARAMS.ECCENTRICITY, centerY, PARAMS.CIRCLE_SIZE, PARAMS.CIRCLE_RING_WIDTH, PARAMS.RING_LUM);
+                },
+                canvas_size: [SCREEN_WIDTH, SCREEN_HEIGHT],
+                choices: "NO_KEYS",
+                trial_duration: function() {
+                    return PARAMS.TIME_ITI_MIN + Math.random() * (PARAMS.TIME_ITI_MAX - PARAMS.TIME_ITI_MIN);
+                }
+            };
+            timeline.push(iti);
+            
+            if (trial === totalTrials / 2 - 1) {
+                const restBreak = {
+                    type: jsPsychHtmlKeyboardResponse,
+                    stimulus: '<div class="instruction-container"><h2>休息时间</h2><p>请闭眼休息一会儿</p><p>按 空格键 查看第二组样例</p></div>',
+                    choices: [' ']
+                };
+                timeline.push(restBreak);
+                
+                timeline.push(instructionSample2);
+                
+                const restFixation = {
+                    type: jsPsychCanvasKeyboardResponse,
+                    stimulus: function(c) {
+                        const ctx = c.getContext('2d');
+                        const centerX = c.width / 2;
+                        const centerY = c.height / 2;
+                        
+                        ctx.fillStyle = '#808080';
+                        ctx.fillRect(0, 0, c.width, c.height);
+                        
+                        drawFixation(ctx, centerX, centerY);
+                        drawCircleRing(ctx, centerX - PARAMS.ECCENTRICITY, centerY, PARAMS.CIRCLE_SIZE, PARAMS.CIRCLE_RING_WIDTH, PARAMS.RING_LUM);
+                        drawCircleRing(ctx, centerX + PARAMS.ECCENTRICITY, centerY, PARAMS.CIRCLE_SIZE, PARAMS.CIRCLE_RING_WIDTH, PARAMS.RING_LUM);
+                    },
+                    canvas_size: [SCREEN_WIDTH, SCREEN_HEIGHT],
+                    choices: "NO_KEYS",
+                    trial_duration: 4000
+                };
+                timeline.push(restFixation);
+            }
+        }
+
+        timeline.push({
+            type: jsPsychHtmlKeyboardResponse,
+            stimulus: '<div class="instruction-container"><h2>正在整理数据...</h2><p>请稍候</p></div>',
+            choices: "NO_KEYS",
+            trial_duration: 600,
+            on_finish: function() {
+                experimentResults.statistics = analyzeResults();
+                saveDataToLocal();
+                jsPsych.data.addProperties({
+                    experiment_end_time: new Date().toISOString()
+                });
+                csv_for_upload = jsPsych.data.get().csv();
+            }
+        });
+
+        timeline.push({
+            type: jsPsychPipe,
+            action: "save",
+            experiment_id: DATAPIPE_EXPERIMENT_ID,
+            filename: function() {
+                const ts = new Date().toISOString().replace(/[:.]/g, "-");
+                return `${subjectID}_run${runNum}_${datapipe_random_id}_${ts}.csv`;
+            },
+            data_string: function() {
+                return csv_for_upload;
+            },
+            on_finish: function(data){
+                console.log("DataPipe full:", data);
+                if (!data.success) {
+                    alert("在线上传失败：数据已本地保存，请联系实验员。");
+                }
+            }
+        });
+
+        timeline.push({
+            type: jsPsychHtmlKeyboardResponse,
+            stimulus: function() {
+                return generateStatisticsReport() + `
+                <div class="instruction-container">
+                    <p style="color:#64FF64;">在线上传步骤已执行（DataPipe）</p>
+                    <p>请按空格键结束实验</p>
+                </div>`;
+            },
+            choices: [" "]
+        });
+
+        jsPsych.run(timeline);
+    </script>
+</body>
+</html>
