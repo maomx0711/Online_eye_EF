@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <title>Center Flanker (jsPsych + WebGazer)</title>
@@ -208,17 +208,17 @@
         }
 
         function generateTrials() {
-            const tarType = shuffle(Array.from({ length: PARAMS.TRIAL_NUM }, (_, i) => i + 1));
+            const trialOrder = shuffle(Array.from({ length: PARAMS.TRIAL_NUM }, (_, i) => i + 1));
             const cueLocations = buildCueLocations();
             const cuedLimit = Math.floor(PARAMS.TRIAL_NUM * PARAMS.CUED_TRIAL_RATIO);
 
-            return tarType.map((value, index) => {
+            return trialOrder.map((value, index) => {
                 const type = (value % 4) + 1;
                 const cued = value <= cuedLimit;
                 const loc = cued ? cueLocations[value - 1] : -1;
                 const targetCode = (type === 1 || type === 2) ? 1 : 2;
                 const targetDir = targetCode === 1 ? 'right' : 'left';
-                const congruent = (type === 1 || type === 3) ? 1 : 2;
+                const congruent = type === 1 || type === 3;
                 return {
                     index: index + 1,
                     type,
@@ -235,12 +235,12 @@
             const positions = [];
             const half = PARAMS.ARROW_SIZE / 2;
             const distance = PARAMS.ARROW_SIZE + PARAMS.ARROW_GAP;
-            for (let m = 1; m <= 9; m++) {
+            for (let positionIndex = 1; positionIndex <= 9; positionIndex++) {
                 let topY;
-                if (m <= 5) {
-                    topY = centerY - half + distance * (m - 1);
+                if (positionIndex <= 5) {
+                    topY = centerY - half + distance * (positionIndex - 1);
                 } else {
-                    topY = centerY - half - distance * (m - 5);
+                    topY = centerY - half - distance * (positionIndex - 5);
                 }
                 positions.push({ x: centerX, y: topY + half });
             }
@@ -319,7 +319,7 @@
             const centerY = ctx.canvas.height / 2;
             drawBackground(ctx);
             drawFixation(ctx, centerX, centerY);
-            drawFlankers(ctx, centerX, centerY, trial.targetDir, trial.congruent === 1);
+            drawFlankers(ctx, centerX, centerY, trial.targetDir, trial.congruent);
             drawCue(ctx, centerX, centerY, trial.cueDir, trial.cueLocation);
         }
 
@@ -353,7 +353,7 @@
                 cueValid: trial.cueLocation === 1 ? 1 : 0,
                 targetDirection: trial.targetDir,
                 targetCode: trial.targetCode,
-                congruent: trial.congruent,
+                congruent: trial.congruent ? 1 : 2,
                 response: responseKey || '',
                 responseCode,
                 rt: trialState.rt,
@@ -378,7 +378,10 @@
             const link = document.createElement('a');
             link.href = url;
             link.download = `${safeSubject}_run${safeRun}_centerflanker.json`;
+            document.body.appendChild(link);
             link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
         }
 
         const jsPsych = initJsPsych({
@@ -403,15 +406,17 @@
             on_finish: function(data) {
                 subjectID = data.response.subjectID;
                 const parsedRun = parseInt(data.response.runNum, 10);
-                if (!Number.isFinite(parsedRun) || parsedRun <= 0) {
-                    alert('Run编号无效，已自动设为1');
+                const runIsValid = Number.isFinite(parsedRun) && parsedRun > 0;
+                if (!runIsValid) {
+                    console.warn('Run编号无效，已自动设为1');
                 }
-                runNum = Number.isFinite(parsedRun) && parsedRun > 0 ? parsedRun : 1;
+                runNum = runIsValid ? parsedRun : 1;
                 experimentResults.subjectID = subjectID;
                 experimentResults.runNum = runNum;
                 jsPsych.data.addProperties({
                     subject_id: subjectID,
-                    run_number: runNum
+                    run_number: runNum,
+                    run_number_valid: runIsValid
                 });
             }
         });
