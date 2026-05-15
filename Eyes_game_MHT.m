@@ -388,7 +388,7 @@ while GetSecs<4.000+t0
 end
 
 %%%%%%%%%%%%%%%%% EyeLink recording start
-eyeTrialInfo = repmat(struct('trial',[],'trialType',[],'cueLocation',[],'targetDirection',[],...
+eyeTrialInfo = repmat(struct('trial',[],'trialType',[],'targetLocation',[],'targetDirection',[],...
     'congruency',[],'trialStart',[],'targetOnset',[],'responseKey',[],'responseTime',[],'trialEnd',[]), 1, TrialNum);
 Eyelink('Command', 'set_idle_mode');
 Eyelink('Command', 'clear_screen %d', 0);
@@ -403,19 +403,19 @@ for trial=1:TrialNum
     t=GetSecs;
     Screen('DrawTexture',w,att,BackGRect);
     Screen('Flip',w);
-    while GetSecs<t+ISI_time;
+    while GetSecs<t+ISI_time
         ;
     end
 
     trialType = trialTypeOrder(trial);
-    cueLoc = result(2,trial);
+    targetLoc = result(2,trial);
     targetDir = result(3,trial);
     congruency = result(8,trial);
     trialStart = GetSecs;
     Eyelink('Message', 'TRIALID %d', trial);
     Eyelink('Message', 'TRIAL_START %d', trial);
     Eyelink('Message', 'TRIAL_TYPE %d', trialType);
-    Eyelink('Message', 'CUE_LOC %d', cueLoc);
+    Eyelink('Message', 'TARGET_LOC %d', targetLoc);
     Eyelink('Message', 'TARGET_DIR %d', targetDir);
     Eyelink('Message', 'CONGRUENCY %d', congruency);
 
@@ -461,7 +461,7 @@ end
 
   while GetSecs-tt<2.0000
         [keyIsDown, secs, keyCode] = KbCheck;
-        if  (~b)&(keyCode(leftKey)|keyCode(rightKey)|keyCode(EscapeKey))
+        if  (~b)&&(keyCode(leftKey)||keyCode(rightKey)||keyCode(EscapeKey))
             b=1;
             if keyCode(rightKey)
                 result(4,trial)=1;
@@ -483,7 +483,7 @@ end
     t=GetSecs;
     Screen('DrawTexture',w,att,BackGRect);
     Screen('Flip',w);
-    while GetSecs<rand(1)*(1-0.5)+1.5+t;
+    while GetSecs<rand(1)*(1-0.5)+1.5+t
         
     end
     %%rest
@@ -512,7 +512,7 @@ end
     trialEnd = GetSecs;
     eyeTrialInfo(trial).trial = trial;
     eyeTrialInfo(trial).trialType = trialType;
-    eyeTrialInfo(trial).cueLocation = cueLoc;
+    eyeTrialInfo(trial).targetLocation = targetLoc;
     eyeTrialInfo(trial).targetDirection = targetDir;
     eyeTrialInfo(trial).congruency = congruency;
     eyeTrialInfo(trial).trialStart = trialStart;
@@ -664,14 +664,12 @@ AE1=(NRT-RT1)*1000;
 AE2=(NRT-RT2)*1000;
 AE3=(NRT-RT3)*1000;
 AE4=(NRT-RT4)*1000;
-NAE=(NRT-NRT)*1000;
 
 iAE0=(iNRT-iRT0)*1000;
 iAE1=(iNRT-iRT1)*1000;
 iAE2=(iNRT-iRT2)*1000;
 iAE3=(iNRT-iRT3)*1000;
 iAE4=(iNRT-iRT4)*1000;
-iNAE=(iNRT-iNRT)*1000;
 
 O_AE0=(RT0)*1000;
 O_AE1=(RT1)*1000;
