@@ -392,8 +392,10 @@ end
 trialInfo = repmat(struct('trial',[],'trialType',[],'targetLocation',[],'targetDirection',[],...
     'congruency',[],'trialStart',[],'targetOnset',[],'responseKey',[],'responseTime',[],'trialEnd',[],...
     'trackerStartTime',[],'trackerEndTime',[],'sampleCount',[]), 1, TrialNum);
-trialSamples = cell(1, TrialNum);
+trialEyeSamples = cell(1, TrialNum);
 trialTypeLabels = {'RR_congruent','RL_incongruent','LL_congruent','LR_incongruent'};
+sampleColumns = {'trackerTime','x','y','pupil'};
+sampleColumnCount = numel(sampleColumns);
 Eyelink('Command', 'set_idle_mode');
 Eyelink('Command', 'clear_screen %d', 0);
 WaitSecs(0.05);
@@ -427,7 +429,8 @@ for trial=1:TrialNum
     congruency = result(8,trial);
     trialStart = GetSecs;
     trackerStartTime = Eyelink('TrackerTime');
-    samples = zeros(0,4);
+    sampleBuffer = zeros(500, sampleColumnCount);
+    sampleCount = 0;
     Eyelink('Message', 'TRIALID %d', trial);
     Eyelink('Message', 'TRIAL_START %d', trial);
     Eyelink('Message', 'TRIAL_TYPE %d', trialType);
@@ -461,7 +464,7 @@ for trial=1:TrialNum
                     result(5,trial)=GetSecs-t_begin;
                      Eyelink('Message', 'RESPONSE %d %d', trial, result(4,trial));
           end
-         samples = appendEyelinkSamples(samples, eyeIndex, el);
+         [sampleBuffer, sampleCount] = appendEyelinkSamples(sampleBuffer, sampleCount, eyeIndex, el);
         
     end
 
@@ -492,7 +495,7 @@ end
              result(5,trial)=GetSecs-t_begin;
              Eyelink('Message', 'RESPONSE %d %d', trial, result(4,trial));
          end
-         samples = appendEyelinkSamples(samples, eyeIndex, el);
+         [sampleBuffer, sampleCount] = appendEyelinkSamples(sampleBuffer, sampleCount, eyeIndex, el);
          if b
              break;
          end
@@ -503,7 +506,7 @@ end
     Screen('DrawTexture',w,att,BackGRect);
     Screen('Flip',w);
     while GetSecs<rand(1)*(1-0.5)+1.5+t
-        samples = appendEyelinkSamples(samples, eyeIndex, el);
+        [sampleBuffer, sampleCount] = appendEyelinkSamples(sampleBuffer, sampleCount, eyeIndex, el);
         
     end
     %%rest
@@ -543,8 +546,9 @@ end
     trialInfo(trial).trialEnd = trialEnd;
     trialInfo(trial).trackerStartTime = trackerStartTime;
     trialInfo(trial).trackerEndTime = trackerEndTime;
-    trialInfo(trial).sampleCount = size(samples,1);
-    trialSamples{trial} = samples;
+    samples = sampleBuffer(1:sampleCount,:);
+    trialInfo(trial).sampleCount = sampleCount;
+    trialEyeSamples{trial} = samples;
     Eyelink('Message', 'TRIAL_END %d', trial);
 end
 Eyelink('Message', 'BLOCK_END %d', runNum);
@@ -815,26 +819,31 @@ eyeData.edfFile = edfFile;
 eyeData.trialInfo = trialInfo;
 eyeData.trialTypeOrder = trialTypeOrder;
 eyeData.trialTypeLabels = trialTypeLabels;
-eyeData.trialSamples = trialSamples;
-eyeData.sampleColumns = {'trackerTime','x','y','pupil'};
+eyeData.trialSamples = trialEyeSamples;
+eyeData.sampleColumns = sampleColumns;
 eyeData.eyeUsed = eyeUsed;
 eyeData.trialSamplesByType = cell(1, numel(trialTypeLabels));
 for typeIndex = 1:numel(trialTypeLabels)
     trialIndices = find(trialTypeOrder == typeIndex);
-    eyeData.trialSamplesByType{typeIndex} = trialSamples(trialIndices);
+    eyeData.trialSamplesByType{typeIndex} = trialEyeSamples(trialIndices);
 end
 
 save (Name,'sts');
 save(FileName, 'result','eyeData');
 
-function samples = appendEyelinkSamples(samples, eyeIndex, el)
+% Append Eyelink gaze/pupil samples into a growing buffer.
+function [samples, sampleCount] = appendEyelinkSamples(samples, sampleCount, eyeIndex, el)
 while Eyelink('NewFloatSampleAvailable') > 0
     evt = Eyelink('NewestFloatSample');
     gx = evt.gx(eyeIndex);
     gy = evt.gy(eyeIndex);
     pa = evt.pa(eyeIndex);
     if gx ~= el.MISSING_DATA && gy ~= el.MISSING_DATA
-        samples(end+1,:) = [evt.time, gx, gy, pa];
+        sampleCount = sampleCount + 1;
+        if sampleCount > size(samples,1)
+            samples = [samples; zeros(500, size(samples,2))];
+        end
+        samples(sampleCount,:) = [evt.time, gx, gy, pa];
     end
 end
 end
