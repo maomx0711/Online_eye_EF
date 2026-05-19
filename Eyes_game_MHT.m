@@ -105,7 +105,7 @@ Black=BlackIndex(ScreenNumber);
 white=WhiteIndex(ScreenNumber);
 Black=(Black+white)/2;
 [w,wRect]=Screen('OpenWindow',ScreenNumber,Black);
-FixationRect=CenterRect([0,0,8,8],[0,0,1280,1024]);
+FixationRect=CenterRect([0,0,6,6],[0,0,1280,1024]);
 
 EscapeKey = KbName('q');
 TriggerKey = KbName('s');
@@ -390,12 +390,25 @@ end
 
 %%%%%%%%%%%%%%%%% EyeLink recording start
 trialInfo = repmat(struct('trial',[],'trialType',[],'targetLocation',[],'targetDirection',[],...
-    'congruency',[],'trialStart',[],'targetOnset',[],'responseKey',[],'responseTime',[],'trialEnd',[]), 1, TrialNum);
+    'congruency',[],'trialStart',[],'targetOnset',[],'responseKey',[],'responseTime',[],'trialEnd',[],...
+    'trackerStartTime',[],'trackerEndTime',[],'sampleCount',[]), 1, TrialNum);
+trialSamples = cell(1, TrialNum);
+trialTypeLabels = {'RR_congruent','RL_incongruent','LL_congruent','LR_incongruent'};
 Eyelink('Command', 'set_idle_mode');
 Eyelink('Command', 'clear_screen %d', 0);
 WaitSecs(0.05);
 Eyelink('StartRecording');
 Eyelink('Message', 'BLOCK_START %d', runNum);
+eyeUsed = Eyelink('EyeAvailable');
+if eyeUsed == el.BINOCULAR
+    eyeUsed = el.LEFT_EYE;
+end
+if eyeUsed == el.RIGHT_EYE
+    eyeIndex = 2;
+else
+    eyeIndex = 1;
+end
+Eyelink('Message', 'EYE_USED %d', eyeUsed);
 
 %%%%%%%%%%%%%%%%% main
 for trial=1:TrialNum
@@ -413,9 +426,12 @@ for trial=1:TrialNum
     targetDir = result(3,trial);
     congruency = result(8,trial);
     trialStart = GetSecs;
+    trackerStartTime = Eyelink('TrackerTime');
+    samples = zeros(0,4);
     Eyelink('Message', 'TRIALID %d', trial);
     Eyelink('Message', 'TRIAL_START %d', trial);
     Eyelink('Message', 'TRIAL_TYPE %d', trialType);
+    Eyelink('Message', 'TRIAL_TYPE_LABEL %s', trialTypeLabels{trialType});
     Eyelink('Message', 'TARGET_LOC %d', targetLoc);
     Eyelink('Message', 'TARGET_DIR %d', targetDir);
     Eyelink('Message', 'CONGRUENCY %d', congruency);
@@ -433,9 +449,9 @@ for trial=1:TrialNum
     while GetSecs-t_begin<0.4
          [keyIsDown, secs, keyCode] = KbCheck;
          if  (~a)&&(keyCode(leftKey)||keyCode(rightKey)||keyCode(EscapeKey))
-                    a=1;
-                    if keyCode(rightKey)
-                        result(4,trial)=1;
+                     a=1;
+                     if keyCode(rightKey)
+                         result(4,trial)=1;
                     elseif keyCode(leftKey)
                         result(4,trial)=2;
                     end
@@ -443,9 +459,10 @@ for trial=1:TrialNum
                         Screen('Closeall');
                     end
                     result(5,trial)=GetSecs-t_begin;
-                    Eyelink('Message', 'RESPONSE %d %d', trial, result(4,trial));
-         end
-       
+                     Eyelink('Message', 'RESPONSE %d %d', trial, result(4,trial));
+          end
+         samples = appendEyelinkSamples(samples, eyeIndex, el);
+        
     end
 
 %%  response
@@ -462,22 +479,23 @@ end
 
   while GetSecs-tt<2.0000
         [keyIsDown, secs, keyCode] = KbCheck;
-        if  (~b)&&(keyCode(leftKey)||keyCode(rightKey)||keyCode(EscapeKey))
-            b=1;
-            if keyCode(rightKey)
-                result(4,trial)=1;
+         if  (~b)&&(keyCode(leftKey)||keyCode(rightKey)||keyCode(EscapeKey))
+             b=1;
+             if keyCode(rightKey)
+                 result(4,trial)=1;
             elseif keyCode(leftKey)
                 result(4,trial)=2;
             end
             if keyCode(EscapeKey)
                 Screen('Closeall');
             end
-            result(5,trial)=GetSecs-t_begin;
-            Eyelink('Message', 'RESPONSE %d %d', trial, result(4,trial));
-        end
-        if b
-            break;
-        end
+             result(5,trial)=GetSecs-t_begin;
+             Eyelink('Message', 'RESPONSE %d %d', trial, result(4,trial));
+         end
+         samples = appendEyelinkSamples(samples, eyeIndex, el);
+         if b
+             break;
+         end
    end
    %%
     %%  ITI
@@ -485,6 +503,7 @@ end
     Screen('DrawTexture',w,att,BackGRect);
     Screen('Flip',w);
     while GetSecs<rand(1)*(1-0.5)+1.5+t
+        samples = appendEyelinkSamples(samples, eyeIndex, el);
         
     end
     %%rest
@@ -511,6 +530,7 @@ end
     end
 
     trialEnd = GetSecs;
+    trackerEndTime = Eyelink('TrackerTime');
     trialInfo(trial).trial = trial;
     trialInfo(trial).trialType = trialType;
     trialInfo(trial).targetLocation = targetLoc;
@@ -521,6 +541,10 @@ end
     trialInfo(trial).responseKey = result(4,trial);
     trialInfo(trial).responseTime = result(5,trial);
     trialInfo(trial).trialEnd = trialEnd;
+    trialInfo(trial).trackerStartTime = trackerStartTime;
+    trialInfo(trial).trackerEndTime = trackerEndTime;
+    trialInfo(trial).sampleCount = size(samples,1);
+    trialSamples{trial} = samples;
     Eyelink('Message', 'TRIAL_END %d', trial);
 end
 Eyelink('Message', 'BLOCK_END %d', runNum);
@@ -790,6 +814,27 @@ Name=['GaAnalysis_result' '_' ID '_' Block];
 eyeData.edfFile = edfFile;
 eyeData.trialInfo = trialInfo;
 eyeData.trialTypeOrder = trialTypeOrder;
+eyeData.trialTypeLabels = trialTypeLabels;
+eyeData.trialSamples = trialSamples;
+eyeData.sampleColumns = {'trackerTime','x','y','pupil'};
+eyeData.eyeUsed = eyeUsed;
+eyeData.trialSamplesByType = cell(1, numel(trialTypeLabels));
+for typeIndex = 1:numel(trialTypeLabels)
+    trialIndices = find(trialTypeOrder == typeIndex);
+    eyeData.trialSamplesByType{typeIndex} = trialSamples(trialIndices);
+end
 
 save (Name,'sts');
 save(FileName, 'result','eyeData');
+
+function samples = appendEyelinkSamples(samples, eyeIndex, el)
+while Eyelink('NewFloatSampleAvailable') > 0
+    evt = Eyelink('NewestFloatSample');
+    gx = evt.gx(eyeIndex);
+    gy = evt.gy(eyeIndex);
+    pa = evt.pa(eyeIndex);
+    if gx ~= el.MISSING_DATA && gy ~= el.MISSING_DATA
+        samples(end+1,:) = [evt.time, gx, gy, pa];
+    end
+end
+end
