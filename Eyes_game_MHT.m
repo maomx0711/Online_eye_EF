@@ -396,6 +396,7 @@ trialEyeSamples = cell(1, TrialNum);
 trialTypeLabels = {'RR_congruent','RL_incongruent','LL_congruent','LR_incongruent'};
 sampleColumns = {'trackerTime','x','y','pupil'};
 sampleColumnCount = numel(sampleColumns);
+sampleBufferSize = 500;
 Eyelink('Command', 'set_idle_mode');
 Eyelink('Command', 'clear_screen %d', 0);
 WaitSecs(0.05);
@@ -429,7 +430,7 @@ for trial=1:TrialNum
     congruency = result(8,trial);
     trialStart = GetSecs;
     trackerStartTime = Eyelink('TrackerTime');
-    sampleBuffer = zeros(500, sampleColumnCount);
+    sampleBuffer = zeros(sampleBufferSize, sampleColumnCount);
     sampleCount = 0;
     Eyelink('Message', 'TRIALID %d', trial);
     Eyelink('Message', 'TRIAL_START %d', trial);
@@ -464,7 +465,7 @@ for trial=1:TrialNum
                     result(5,trial)=GetSecs-t_begin;
                      Eyelink('Message', 'RESPONSE %d %d', trial, result(4,trial));
           end
-         [sampleBuffer, sampleCount] = appendEyelinkSamples(sampleBuffer, sampleCount, eyeIndex, el);
+         [sampleBuffer, sampleCount] = appendEyelinkSamples(sampleBuffer, sampleCount, eyeIndex, el, sampleBufferSize);
         
     end
 
@@ -495,7 +496,7 @@ end
              result(5,trial)=GetSecs-t_begin;
              Eyelink('Message', 'RESPONSE %d %d', trial, result(4,trial));
          end
-         [sampleBuffer, sampleCount] = appendEyelinkSamples(sampleBuffer, sampleCount, eyeIndex, el);
+         [sampleBuffer, sampleCount] = appendEyelinkSamples(sampleBuffer, sampleCount, eyeIndex, el, sampleBufferSize);
          if b
              break;
          end
@@ -506,7 +507,7 @@ end
     Screen('DrawTexture',w,att,BackGRect);
     Screen('Flip',w);
     while GetSecs<rand(1)*(1-0.5)+1.5+t
-        [sampleBuffer, sampleCount] = appendEyelinkSamples(sampleBuffer, sampleCount, eyeIndex, el);
+        [sampleBuffer, sampleCount] = appendEyelinkSamples(sampleBuffer, sampleCount, eyeIndex, el, sampleBufferSize);
         
     end
     %%rest
@@ -832,7 +833,7 @@ save (Name,'sts');
 save(FileName, 'result','eyeData');
 
 % Append Eyelink gaze/pupil samples into a growing buffer.
-function [samples, sampleCount] = appendEyelinkSamples(samples, sampleCount, eyeIndex, el)
+function [samples, sampleCount] = appendEyelinkSamples(samples, sampleCount, eyeIndex, el, sampleBufferSize)
 while Eyelink('NewFloatSampleAvailable') > 0
     evt = Eyelink('NewestFloatSample');
     gx = evt.gx(eyeIndex);
@@ -841,7 +842,7 @@ while Eyelink('NewFloatSampleAvailable') > 0
     if gx ~= el.MISSING_DATA && gy ~= el.MISSING_DATA
         sampleCount = sampleCount + 1;
         if sampleCount > size(samples,1)
-            samples = [samples; zeros(500, size(samples,2))];
+            samples = [samples; zeros(sampleBufferSize, size(samples,2))];
         end
         samples(sampleCount,:) = [evt.time, gx, gy, pa];
     end
