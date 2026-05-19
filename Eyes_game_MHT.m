@@ -465,7 +465,7 @@ for trial=1:TrialNum
                     result(5,trial)=GetSecs-t_begin;
                      Eyelink('Message', 'RESPONSE %d %d', trial, result(4,trial));
           end
-         [sampleBuffer, sampleCount] = appendEyelinkSamples(sampleBuffer, sampleCount, eyeIndex, el, sampleBufferSize);
+         [sampleBuffer, sampleCount] = bufferEyelinkSamples(sampleBuffer, sampleCount, eyeIndex, el, sampleBufferSize);
         
     end
 
@@ -496,7 +496,7 @@ end
              result(5,trial)=GetSecs-t_begin;
              Eyelink('Message', 'RESPONSE %d %d', trial, result(4,trial));
          end
-         [sampleBuffer, sampleCount] = appendEyelinkSamples(sampleBuffer, sampleCount, eyeIndex, el, sampleBufferSize);
+         [sampleBuffer, sampleCount] = bufferEyelinkSamples(sampleBuffer, sampleCount, eyeIndex, el, sampleBufferSize);
          if b
              break;
          end
@@ -507,7 +507,7 @@ end
     Screen('DrawTexture',w,att,BackGRect);
     Screen('Flip',w);
     while GetSecs<rand(1)*(1-0.5)+1.5+t
-        [sampleBuffer, sampleCount] = appendEyelinkSamples(sampleBuffer, sampleCount, eyeIndex, el, sampleBufferSize);
+        [sampleBuffer, sampleCount] = bufferEyelinkSamples(sampleBuffer, sampleCount, eyeIndex, el, sampleBufferSize);
         
     end
     %%rest
@@ -833,13 +833,13 @@ save (Name,'sts');
 save(FileName, 'result','eyeData');
 
 % Append Eyelink gaze/pupil samples into a growing buffer.
-function [samples, sampleCount] = appendEyelinkSamples(samples, sampleCount, eyeIndex, el, sampleBufferSize)
+function [samples, sampleCount] = bufferEyelinkSamples(samples, sampleCount, eyeIndex, el, sampleBufferSize)
 while Eyelink('NewFloatSampleAvailable') > 0
     evt = Eyelink('NewestFloatSample');
     gx = evt.gx(eyeIndex);
     gy = evt.gy(eyeIndex);
     pa = evt.pa(eyeIndex);
-    if gx ~= el.MISSING_DATA && gy ~= el.MISSING_DATA
+    if gx ~= el.MISSING_DATA && gy ~= el.MISSING_DATA && pa ~= el.MISSING_DATA
         sampleCount = sampleCount + 1;
         if sampleCount > size(samples,1)
             samples = [samples; zeros(sampleBufferSize, size(samples,2))];
